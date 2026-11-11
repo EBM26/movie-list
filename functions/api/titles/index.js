@@ -1,5 +1,27 @@
 import { fetchTitle, insertTitle, getTitleByTmdb, rowToJson, json } from '../../../shared/titles.js';
 
+// GET /api/titles?status=&type=  -> saved titles (newest first)
+export async function onRequestGet({ request, env }) {
+  const params = new URL(request.url).searchParams;
+  const status = params.get('status');
+  const type = params.get('type');
+  const where = [];
+  const binds = [];
+  if (status) {
+    if (!['want', 'watching', 'watched'].includes(status)) return json({ error: 'Invalid status' }, 400);
+    where.push('list_status = ?');
+    binds.push(status);
+  }
+  if (type) {
+    if (type !== 'movie' && type !== 'tv') return json({ error: 'Invalid type' }, 400);
+    where.push('media_type = ?');
+    binds.push(type);
+  }
+  const sql = `SELECT * FROM titles ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY added_at DESC, id DESC`;
+  const { results } = await env.DB.prepare(sql).bind(...binds).all();
+  return json({ titles: results.map(rowToJson) });
+}
+
 // POST /api/titles {tmdb_id, media_type} -> fetch TMDB + OMDb, insert, return the row
 export async function onRequestPost({ request, env }) {
   let body;

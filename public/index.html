@@ -4,15 +4,56 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Watchlist</title>
-  <style>
-    body { margin: 0; background: #fff; color: #111; font: 16px/1.5 system-ui, -apple-system, sans-serif; }
-    main { max-width: 960px; margin: 0 auto; padding: 24px 16px; }
-  </style>
+  <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
-  <main>
-    <h1>Watchlist</h1>
-    <p>Coming soon.</p>
+  <header class="topbar">
+    <div class="wrap topbar-inner">
+      <h1 class="logo">Watchlist</h1>
+      <div class="search" id="search">
+        <input id="search-input" type="search" placeholder="Search movies and series…" autocomplete="off"
+               aria-label="Search movies and series" aria-controls="search-results" aria-expanded="false">
+        <div id="search-results" class="search-results" role="listbox" hidden></div>
+      </div>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <section class="list-controls" aria-label="List filters">
+      <div class="tabs" role="tablist" id="tabs">
+        <button role="tab" data-status="want">Want <span class="count"></span></button>
+        <button role="tab" data-status="watching">Watching <span class="count"></span></button>
+        <button role="tab" data-status="watched">Watched <span class="count"></span></button>
+      </div>
+      <div class="filters">
+        <div class="seg" id="type-filter" role="group" aria-label="Type">
+          <button data-type="all">All</button>
+          <button data-type="movie">Movies</button>
+          <button data-type="tv">Series</button>
+        </div>
+        <label class="sort">
+          <span class="visually-hidden">Sort by</span>
+          <select id="sort">
+            <option value="added">Recently added</option>
+            <option value="rating">IMDb rating</option>
+            <option value="release">Next release date</option>
+          </select>
+        </label>
+      </div>
+    </section>
+
+    <p id="list-message" class="list-message" hidden></p>
+    <div id="grid" class="grid"></div>
   </main>
+
+  <div id="panel-backdrop" class="panel-backdrop" hidden></div>
+  <aside id="panel" class="panel" role="dialog" aria-modal="true" aria-labelledby="panel-title" hidden>
+    <button class="panel-close" id="panel-close" aria-label="Close">×</button>
+    <div id="panel-body"></div>
+  </aside>
+
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+  <script src="/app.js" type="module"></script>
 </body>
 </html>
