@@ -25,16 +25,10 @@
   <main class="wrap">
     <section class="list-controls" aria-label="List filters">
       <div class="tabs" role="tablist" id="tabs">
-        <button role="tab" data-status="want">Want <span class="count"></span></button>
-        <button role="tab" data-status="watching">Watching <span class="count"></span></button>
-        <button role="tab" data-status="watched">Watched <span class="count"></span></button>
+        <button role="tab" data-type="movie">Movies <span class="count"></span></button>
+        <button role="tab" data-type="tv">Series <span class="count"></span></button>
       </div>
       <div class="filters">
-        <div class="seg" id="type-filter" role="group" aria-label="Type">
-          <button data-type="all">All</button>
-          <button data-type="movie">Movies</button>
-          <button data-type="tv">Series</button>
-        </div>
         <label class="sort">
           <span class="visually-hidden">Sort by</span>
           <select id="sort">

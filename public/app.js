@@ -1,20 +1,25 @@
 // Watchlist front end. Plain JS, no build step.
 
 const IMG = 'https://image.tmdb.org/t/p/';
-const STATUS_LABELS = { want: 'Want', watching: 'Watching', watched: 'Watched' };
+const TABS = { movie: 'Movies', tv: 'Series' };
 
 const state = {
   titles: [],
   loaded: false,
-  status: pref('status', 'want'),
-  type: pref('type', 'all'),
+  tab: validTab(pref('tab', 'movie')),
   sort: pref('sort', 'added'),
+  // Detail panel shows either a saved title (openId) or an unsaved search result (preview).
   openId: null,
+  preview: null, // { key, media_type, tmdb_id, title, loading, error }
 };
 
 // ---------- helpers ----------
 
 const $ = (sel, root = document) => root.querySelector(sel);
+
+function validTab(t) {
+  return t in TABS ? t : 'movie';
+}
 
 function pref(key, fallback) {
   try {
@@ -35,6 +40,14 @@ function esc(s) {
   return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 }
 
+// Session expired or logged out in another tab -> back to the login page.
+function checkAuth(res) {
+  if (res.status === 401) {
+    location.href = `/login?next=${encodeURIComponent(location.pathname + location.search)}`;
+    throw new Error('Not logged in');
+  }
+}
+
 async function api(path, opts = {}) {
   const res = await fetch(path, {
     ...opts,
@@ -50,14 +63,6 @@ async function api(path, opts = {}) {
   }
   if (!res.ok) throw new Error(data?.error || `Request failed (${res.status})`);
   return data;
-}
-
-// Session expired or logged out in another tab -> back to the login page.
-function checkAuth(res) {
-  if (res.status === 401) {
-    location.href = `/login?next=${encodeURIComponent(location.pathname + location.search)}`;
-    throw new Error('Not logged in');
-  }
 }
 
 let toastTimer;
@@ -206,18 +211,10 @@ function cardLogos(t) {
   return list.length ? `<div class="logos">${logoImgs(list)}</div>` : '';
 }
 
-function statusSelect(t) {
-  return `<select class="status-select" data-action="status" aria-label="List status">${Object.entries(STATUS_LABELS)
-    .map(([v, l]) => `<option value="${v}"${t.list_status === v ? ' selected' : ''}>${l}</option>`)
-    .join('')}</select>`;
-}
-
 // ---------- list rendering ----------
 
 function visibleTitles() {
-  let list = state.titles.filter(
-    (t) => t.list_status === state.status && (state.type === 'all' || t.media_type === state.type),
-  );
+  const list = state.titles.filter((t) => t.media_type === state.tab);
   const byAdded = (a, b) => b.added_at.localeCompare(a.added_at) || b.id - a.id;
   if (state.sort === 'rating') {
     list.sort((a, b) => (b.imdb_rating ?? -1) - (a.imdb_rating ?? -1) || byAdded(a, b));
@@ -238,13 +235,10 @@ function visibleTitles() {
 
 function renderControls() {
   for (const btn of document.querySelectorAll('#tabs button')) {
-    const s = btn.dataset.status;
-    btn.setAttribute('aria-selected', String(s === state.status));
-    const n = state.titles.filter((t) => t.list_status === s && (state.type === 'all' || t.media_type === state.type)).length;
+    const type = btn.dataset.type;
+    btn.setAttribute('aria-selected', String(type === state.tab));
+    const n = state.titles.filter((t) => t.media_type === type).length;
     $('.count', btn).textContent = n ? n : '';
-  }
-  for (const btn of document.querySelectorAll('#type-filter button')) {
-    btn.setAttribute('aria-pressed', String(btn.dataset.type === state.type));
   }
   $('#sort').value = state.sort;
 }
@@ -253,17 +247,16 @@ function cardHtml(t) {
   const line = statusLine(t);
   return `
     <article class="card" data-id="${t.id}" tabindex="0" aria-label="${esc(t.title)}">
-      ${posterImg(t)}
+      <div class="card-media">
+        ${posterImg(t)}
+        <button class="card-remove" data-action="delete" aria-label="Remove ${esc(t.title)}" title="Remove">×</button>
+      </div>
       <div class="card-body">
         <h2 class="card-title">${esc(t.title)} ${t.year ? `<span class="card-year">${t.year}</span>` : ''}</h2>
         ${ratingsHtml(t)}
         ${line ? `<div class="status-line">${esc(line)}</div>` : ''}
         ${t.media_type === 'tv' && t.networks ? `<div class="networks">${esc(t.networks)}</div>` : ''}
         ${cardLogos(t)}
-        <div class="card-actions">
-          ${statusSelect(t)}
-          <button class="icon-btn" data-action="delete" aria-label="Remove ${esc(t.title)}" title="Remove">×</button>
-        </div>
       </div>
     </article>`;
 }
@@ -274,11 +267,8 @@ function render() {
   const msg = $('#list-message');
   if (!state.loaded) {
     msg.textContent = 'Loading…';
-  } else if (!state.titles.length) {
-    msg.textContent = 'Your list is empty. Search above to add movies and series.';
   } else if (!list.length) {
-    const kind = state.type === 'movie' ? 'movies' : state.type === 'tv' ? 'series' : 'titles';
-    msg.textContent = `No ${kind} in ${STATUS_LABELS[state.status]}.`;
+    msg.textContent = `No ${TABS[state.tab].toLowerCase()} yet. Search above to add some.`;
   }
   msg.hidden = state.loaded && list.length > 0;
   $('#grid').innerHTML = list.map(cardHtml).join('');
@@ -301,23 +291,17 @@ function upsertTitle(title) {
   else state.titles.unshift(title);
 }
 
-async function changeStatus(id, status) {
-  const t = state.titles.find((x) => x.id === id);
-  if (!t || t.list_status === status) return;
-  const prev = t.list_status;
-  t.list_status = status;
+const findSaved = (mediaType, tmdbId) => state.titles.find((t) => t.media_type === mediaType && t.tmdb_id === tmdbId);
+
+// Save a title (from search or from the preview panel). Returns the saved row.
+async function saveTitle(mediaType, tmdbId) {
+  const { title } = await api('/api/titles', { method: 'POST', body: { tmdb_id: tmdbId, media_type: mediaType } });
+  upsertTitle(title);
   render();
-  if (state.openId === id) renderPanel();
-  try {
-    const { title } = await api(`/api/titles/${id}`, { method: 'PATCH', body: { list_status: status } });
-    upsertTitle(title);
-    toast(`Moved “${title.title}” to ${STATUS_LABELS[status]}`);
-  } catch (e) {
-    t.list_status = prev;
-    toast(`Couldn't update: ${e.message}`);
-  }
-  render();
-  if (state.openId === id) renderPanel();
+  refreshSearchSavedState();
+  const where = title.media_type === state.tab ? '' : ` to ${TABS[title.media_type]}`;
+  toast(`Saved “${title.title}”${where}`);
+  return title;
 }
 
 async function removeTitle(id) {
@@ -339,17 +323,10 @@ async function removeTitle(id) {
 
 function setupList() {
   $('#tabs').addEventListener('click', (e) => {
-    const btn = e.target.closest('button[data-status]');
-    if (!btn) return;
-    state.status = btn.dataset.status;
-    savePref('status', state.status);
-    render();
-  });
-  $('#type-filter').addEventListener('click', (e) => {
     const btn = e.target.closest('button[data-type]');
     if (!btn) return;
-    state.type = btn.dataset.type;
-    savePref('type', state.type);
+    state.tab = validTab(btn.dataset.type);
+    savePref('tab', state.tab);
     render();
   });
   $('#sort').addEventListener('change', (e) => {
@@ -359,16 +336,12 @@ function setupList() {
   });
 
   const grid = $('#grid');
-  grid.addEventListener('change', (e) => {
-    if (e.target.dataset.action !== 'status') return;
-    changeStatus(Number(e.target.closest('.card').dataset.id), e.target.value);
-  });
   grid.addEventListener('click', (e) => {
     const card = e.target.closest('.card');
     if (!card) return;
     const id = Number(card.dataset.id);
     if (e.target.closest('[data-action="delete"]')) return removeTitle(id);
-    if (e.target.closest('a, button, select')) return; // let controls/links work
+    if (e.target.closest('a, button, select')) return;
     openPanel(id);
   });
   grid.addEventListener('keydown', (e) => {
@@ -381,16 +354,16 @@ function setupList() {
 
 // ---------- search ----------
 
-const search = { timer: null, ctrl: null, results: [], q: '' };
+const search = { timer: null, ctrl: null, results: [], q: '', loading: false };
+
+function hideSearch() {
+  $('#search-results').hidden = true;
+  $('#search-input').setAttribute('aria-expanded', 'false');
+}
 
 function renderSearch() {
   const box = $('#search-results');
-  const input = $('#search-input');
-  if (!search.q) {
-    box.hidden = true;
-    input.setAttribute('aria-expanded', 'false');
-    return;
-  }
+  if (!search.q) return hideSearch();
   box.innerHTML = search.results.length
     ? search.results
         .map((r, i) => {
@@ -399,8 +372,8 @@ function renderSearch() {
             : '<div class="sr-poster"></div>';
           const btn = r.saved
             ? '<button class="btn saved" disabled>Saved</button>'
-            : `<button class="btn" data-index="${i}">Save</button>`;
-          return `<div class="sr-item" role="option">
+            : `<button class="btn" data-save="${i}">Save</button>`;
+          return `<div class="sr-item" role="option" tabindex="0" data-index="${i}" title="View details">
             ${poster}
             <div class="sr-main">
               <div class="sr-title">${esc(r.title)}</div>
@@ -412,12 +385,12 @@ function renderSearch() {
         .join('')
     : `<div class="sr-empty">${search.loading ? 'Searching…' : 'No results'}</div>`;
   box.hidden = false;
-  input.setAttribute('aria-expanded', 'true');
+  $('#search-input').setAttribute('aria-expanded', 'true');
 }
 
 function refreshSearchSavedState() {
   for (const r of search.results) {
-    const t = state.titles.find((x) => x.tmdb_id === r.id && x.media_type === r.media_type);
+    const t = findSaved(r.media_type, r.id);
     r.saved = !!t;
     r.saved_id = t?.id ?? null;
   }
@@ -445,24 +418,27 @@ async function runSearch(q) {
   renderSearch();
 }
 
-async function saveResult(index, btn) {
+async function saveFromSearch(index, btn) {
   const r = search.results[index];
   if (!r) return;
   btn.disabled = true;
   btn.textContent = 'Saving…';
   try {
-    const { title } = await api('/api/titles', { method: 'POST', body: { tmdb_id: r.id, media_type: r.media_type } });
-    upsertTitle(title);
-    r.saved = true;
-    r.saved_id = title.id;
-    renderSearch();
-    render();
-    toast(`Saved “${title.title}” to ${STATUS_LABELS[title.list_status]}`);
+    await saveTitle(r.media_type, r.id);
   } catch (e) {
     btn.disabled = false;
     btn.textContent = 'Save';
     toast(`Couldn't save: ${e.message}`);
   }
+}
+
+function openSearchResult(index) {
+  const r = search.results[index];
+  if (!r) return;
+  hideSearch();
+  const saved = findSaved(r.media_type, r.id);
+  if (saved) openPanel(saved.id);
+  else openPreview(r);
 }
 
 function setupSearch() {
@@ -486,20 +462,25 @@ function setupSearch() {
   input.addEventListener('focus', () => search.q && renderSearch());
   input.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
-      box.hidden = true;
-      input.setAttribute('aria-expanded', 'false');
+      hideSearch();
       input.blur();
     }
   });
   box.addEventListener('click', (e) => {
-    const btn = e.target.closest('button[data-index]');
-    if (btn) saveResult(Number(btn.dataset.index), btn);
+    const saveBtn = e.target.closest('button[data-save]');
+    if (saveBtn) return saveFromSearch(Number(saveBtn.dataset.save), saveBtn);
+    if (e.target.closest('button')) return; // disabled "Saved"
+    const item = e.target.closest('.sr-item');
+    if (item) openSearchResult(Number(item.dataset.index));
+  });
+  box.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && e.target.classList.contains('sr-item')) {
+      e.preventDefault();
+      openSearchResult(Number(e.target.dataset.index));
+    }
   });
   document.addEventListener('click', (e) => {
-    if (!e.target.closest('#search')) {
-      box.hidden = true;
-      input.setAttribute('aria-expanded', 'false');
-    }
+    if (!e.target.closest('#search')) hideSearch();
   });
 }
 
@@ -507,10 +488,9 @@ function setupSearch() {
 
 let lastFocus = null;
 
-function openPanel(id) {
-  state.openId = id;
+function showPanel() {
+  if (!$('#panel').hidden) return;
   lastFocus = document.activeElement;
-  renderPanel();
   $('#panel').hidden = false;
   $('#panel-backdrop').hidden = false;
   document.body.classList.add('no-scroll');
@@ -518,8 +498,47 @@ function openPanel(id) {
   $('#panel-close').focus();
 }
 
+function openPanel(id) {
+  state.openId = id;
+  state.preview = null;
+  renderPanel();
+  showPanel();
+  $('#panel').scrollTop = 0;
+}
+
+// Unsaved search result: show basic info right away, then load full details.
+async function openPreview(r) {
+  const key = `${r.media_type}:${r.id}`;
+  state.openId = null;
+  state.preview = {
+    key,
+    media_type: r.media_type,
+    tmdb_id: r.id,
+    loading: true,
+    error: null,
+    title: { media_type: r.media_type, tmdb_id: r.id, title: r.title, year: r.year, poster_path: r.poster_path },
+  };
+  renderPanel();
+  showPanel();
+  $('#panel').scrollTop = 0;
+  try {
+    const data = await api(`/api/preview/${r.media_type}/${r.id}`);
+    if (state.preview?.key !== key) return; // panel moved on
+    const saved = data.saved_id && state.titles.find((t) => t.id === data.saved_id);
+    if (saved) return openPanel(saved.id);
+    state.preview.title = data.title;
+    state.preview.loading = false;
+  } catch (e) {
+    if (state.preview?.key !== key) return;
+    state.preview.loading = false;
+    state.preview.error = e.message;
+  }
+  renderPanel();
+}
+
 function closePanel() {
   state.openId = null;
+  state.preview = null;
   $('#panel').hidden = true;
   $('#panel-backdrop').hidden = true;
   $('#panel-body').innerHTML = ''; // stops the trailer
@@ -550,9 +569,9 @@ function datesHtml(t) {
           ],
         ].filter(([, v]) => v != null && v !== '');
   if (!rows.length) return '<p class="muted small">No US release dates yet.</p>';
-  const fmt = (label, v) =>
+  const fmt = (v) =>
     t.media_type === 'movie' ? `${formatDate(v)}${isFuture(v) ? ` <span class="muted small">(${esc(relDate(v))})</span>` : ''}` : esc(v);
-  return `<dl class="dates">${rows.map(([l, v]) => `<dt>${esc(l)}</dt><dd>${fmt(l, v)}</dd>`).join('')}</dl>`;
+  return `<dl class="dates">${rows.map(([l, v]) => `<dt>${esc(l)}</dt><dd>${fmt(v)}</dd>`).join('')}</dl>`;
 }
 
 // Streaming (flatrate) providers only, with names.
@@ -565,47 +584,64 @@ function providersHtml(t) {
   </div>`;
 }
 
-function renderPanel() {
-  const t = state.titles.find((x) => x.id === state.openId);
-  if (!t) return closePanel();
-  const line = statusLine(t);
-  const links = [
-    t.imdb_id && `<a href="https://www.imdb.com/title/${esc(t.imdb_id)}/" target="_blank" rel="noopener">IMDb ↗</a>`,
-  ].filter(Boolean);
-  const refreshed = t.last_refreshed_at ? `Updated ${formatDate(t.last_refreshed_at.slice(0, 10))}` : '';
+function trailerHtml(t) {
+  if (!t.trailer_key) return '';
+  return `<h3>Trailer</h3>
+    <div class="trailer">
+      <iframe src="https://www.youtube-nocookie.com/embed/${encodeURIComponent(t.trailer_key)}"
+        title="${esc(t.title)} trailer" loading="lazy"
+        referrerpolicy="strict-origin-when-cross-origin"
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+        allowfullscreen></iframe>
+    </div>`;
+}
 
-  $('#panel-body').innerHTML = `
+function renderPanel() {
+  const saved = state.openId != null ? state.titles.find((x) => x.id === state.openId) : null;
+  const preview = state.preview;
+  if (!saved && !preview) return closePanel();
+  const t = saved || preview.title;
+  const loading = !saved && preview.loading;
+  const error = !saved && preview.error;
+
+  const head = `
     <div class="panel-head">
       ${posterImg(t, 'w342')}
       <div>
         <h2 id="panel-title">${esc(t.title)}</h2>
         <div class="sub">${[t.year, t.media_type === 'movie' ? 'Movie' : 'Series', t.media_type === 'tv' ? t.networks : null].filter(Boolean).map(esc).join(' · ')}</div>
-        ${ratingsHtml(t)}
-        ${line ? `<div class="status-line" style="margin-top:8px">${esc(line)}</div>` : ''}
+        ${loading ? '' : ratingsHtml(t)}
+        ${!loading && statusLine(t) ? `<div class="status-line" style="margin-top:8px">${esc(statusLine(t))}</div>` : ''}
       </div>
-    </div>
+    </div>`;
 
+  const actions = saved
+    ? `<button class="btn saved" disabled>Saved</button>
+       <button class="btn ghost" data-action="refresh">Refresh data</button>
+       <button class="btn ghost" data-action="delete">Remove</button>
+       <span class="muted small">${t.last_refreshed_at ? `Updated ${esc(formatDate(t.last_refreshed_at.slice(0, 10)))}` : ''}</span>`
+    : `<button class="btn" data-action="save">Save to list</button>`;
+
+  if (loading || error) {
+    $('#panel-body').innerHTML = `${head}
+      <p class="muted">${loading ? 'Loading details…' : `Couldn't load details: ${esc(error)}`}</p>
+      <div class="panel-actions">${actions}</div>`;
+    return;
+  }
+
+  $('#panel-body').innerHTML = `
+    ${head}
+    <div class="panel-actions panel-actions-top">${actions}</div>
     ${t.overview ? `<p class="overview">${esc(t.overview)}</p>` : ''}
 
     <h3>${t.media_type === 'movie' ? 'US release dates' : 'Series info'}</h3>
     ${datesHtml(t)}
 
-    ${
-      t.trailer_key
-        ? `<h3>Trailer</h3><div class="trailer"><iframe src="https://www.youtube-nocookie.com/embed/${esc(t.trailer_key)}" title="Trailer" loading="lazy" allow="encrypted-media; picture-in-picture; fullscreen" allowfullscreen></iframe></div>`
-        : ''
-    }
+    ${trailerHtml(t)}
 
     <h3>Streaming (US)</h3>
     ${providersHtml(t)}
-    ${links.length ? `<div class="links">${links.join('')}</div>` : ''}
-
-    <div class="panel-actions">
-      ${statusSelect(t)}
-      <button class="btn ghost" data-action="refresh">Refresh data</button>
-      <button class="btn ghost" data-action="delete">Remove</button>
-      <span class="muted small" id="panel-refreshed">${esc(refreshed)}</span>
-    </div>`;
+    ${t.imdb_id ? `<div class="links"><a href="https://www.imdb.com/title/${esc(t.imdb_id)}/" target="_blank" rel="noopener">IMDb ↗</a></div>` : ''}`;
 }
 
 async function refreshTitle(id, btn) {
@@ -624,21 +660,37 @@ async function refreshTitle(id, btn) {
   }
 }
 
+async function saveFromPanel(btn) {
+  const p = state.preview;
+  if (!p) return;
+  btn.disabled = true;
+  btn.textContent = 'Saving…';
+  try {
+    const title = await saveTitle(p.media_type, p.tmdb_id);
+    if (state.preview?.key === p.key) {
+      state.preview = null;
+      state.openId = title.id;
+      renderPanel();
+    }
+  } catch (e) {
+    btn.disabled = false;
+    btn.textContent = 'Save to list';
+    toast(`Couldn't save: ${e.message}`);
+  }
+}
+
 function setupPanel() {
   $('#panel-close').addEventListener('click', closePanel);
   $('#panel-backdrop').addEventListener('click', closePanel);
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && state.openId != null) closePanel();
+    if (e.key === 'Escape' && !$('#panel').hidden) closePanel();
   });
-  const body = $('#panel-body');
-  body.addEventListener('change', (e) => {
-    if (e.target.dataset.action === 'status') changeStatus(state.openId, e.target.value);
-  });
-  body.addEventListener('click', (e) => {
+  $('#panel-body').addEventListener('click', (e) => {
     const btn = e.target.closest('button[data-action]');
     if (!btn) return;
     if (btn.dataset.action === 'refresh') refreshTitle(state.openId, btn);
     if (btn.dataset.action === 'delete') removeTitle(state.openId);
+    if (btn.dataset.action === 'save') saveFromPanel(btn);
   });
 }
 

@@ -10,7 +10,7 @@ A personal web app (single user) to search movies and TV series, save the ones I
 - Code lives in a GitHub repo; Pages deploys from it.
 - White background, clean minimal UI, mobile-friendly. Keep it simple and low-maintenance.
 - API keys stored as Cloudflare secrets, never in front-end code. All third-party calls go through Pages Functions.
-- Protect the whole app with Cloudflare Access (single allowed email) so it isn't public.
+- Protect the whole app (pages and /api) with a password login in a Pages Functions `_middleware.js` (`APP_PASSWORD` secret, signed HttpOnly session cookie valid 30 days, logout link).
 
 ## Data sources
 Region is always **US**.
@@ -44,8 +44,8 @@ CREATE TABLE titles (
   year INTEGER,
   poster_path TEXT,
   overview TEXT,
-  trailer_key TEXT,                -- YouTube key from videos
-  list_status TEXT NOT NULL DEFAULT 'want' CHECK (list_status IN ('want','watching','watched')),
+  trailer_key TEXT,                -- YouTube key: site YouTube + type Trailer, official first, then newest
+  list_status TEXT NOT NULL DEFAULT 'want' CHECK (list_status IN ('want','watching','watched')),  -- unused by the UI since watched titles are deleted
   added_at TEXT NOT NULL DEFAULT (datetime('now')),
 
   -- ratings (OMDb)
@@ -101,6 +101,7 @@ Store dates as ISO `YYYY-MM-DD`. For each release type, keep the earliest US dat
 - `DELETE /api/titles/:id`
 - `POST /api/titles/:id/refresh` → manual refresh of one title.
 - `GET /api/events?unseen=1` and `POST /api/events/seen` → the updates feed.
+- `GET /api/preview/:media_type/:tmdb_id` → fetch + normalize TMDB and OMDb data for an unsaved title, without writing to the database.
 - `GET /api/upcoming` → TMDB upcoming US movies (not saved, just for browsing).
 
 Put the shared "fetch and normalize a title" logic in one module used by both the Pages Functions and the cron Worker.
@@ -130,11 +131,11 @@ Put the shared "fetch and normalize a title" logic in one module used by both th
 - Show networks (e.g. "Netflix", "HBO") on the card.
 
 ### Where to watch
-- From `watch/providers.results.US`: `flatrate` (streaming), `rent`, `buy`, and `link` (JustWatch page). Show provider logos (`https://image.tmdb.org/t/p/w92{logo_path}`) grouped as Stream / Rent / Buy, linking to `link`.
+- From `watch/providers.results.US`: `flatrate` (streaming), `rent`, `buy`, and `link` (JustWatch page). Store all of them, but on cards and in the detail panel show only streaming (`flatrate`) logos (`https://image.tmdb.org/t/p/w92{logo_path}`), with no JustWatch link. Rent/buy still drives `has_rent_or_buy`, the status line and refresh alerts.
 
 ## Daily refresh (cron Worker)
 - Schedule: once a day (e.g. `0 9 * * *` UTC).
-- Refresh all titles where `list_status != 'watched'`. Skip watched titles entirely.
+- Refresh all saved titles (watched titles are deleted from the list, so there is nothing to skip).
 - TMDB data every run. OMDb ratings only if `ratings_refreshed_at` is older than 7 days (saves quota).
 - Compare old vs new values and insert an `events` row for:
   - Rent/buy providers appeared → "{title} is now available to rent/buy"
@@ -147,20 +148,21 @@ Put the shared "fetch and normalize a title" logic in one module used by both th
 Single page, three areas:
 1. **Search bar** at top with debounced (300ms) results dropdown: poster thumb, title, year, Movie/Series tag, "Save" button (or "Saved").
 2. **Updates feed**: unseen events at the top, dismissable ("mark all seen"). Also show a browser notification for new unseen events when the page loads, if permission was granted.
-3. **My list**: card grid with tabs Want / Watching / Watched and a Movies / Series / All filter. Sort by: recently added, IMDb rating, next release date.
-   - Card: poster, title, year, IMDb rating + vote count (e.g. "7.8 · 412K votes"), RT/Metascore if present, the status line from the rules above, provider logos, status dropdown, remove button.
-   - Click a card → detail panel: overview, all US release dates, trailer embed, full provider list with JustWatch link, IMDb link (`https://www.imdb.com/title/{imdb_id}/`), manual refresh button.
+3. **My list**: card grid with two tabs, Movies (default) and Series. Sort by: recently added, IMDb rating, next release date.
+   - Card: poster, title, year, IMDb rating + vote count (e.g. "7.8 · 412K votes"), RT/Metascore if present, the status line from the rules above, streaming provider logos, remove button (no status dropdown: watched titles get deleted).
+   - Click a card → detail panel: overview, all US release dates, trailer embed (`https://www.youtube-nocookie.com/embed/{key}`, `referrerpolicy="strict-origin-when-cross-origin"`, hidden when there's no trailer), streaming providers, IMDb link (`https://www.imdb.com/title/{imdb_id}/`), manual refresh button.
+   - Click a search result → the same detail panel for an unsaved title via `GET /api/preview/:media_type/:tmdb_id` (fetch + normalize, no DB write), with a "Save to list" button (or "Saved").
 
 Format vote counts as K/M. Format dates as "Mar 12, 2027". Use relative words for near dates ("Thursday", "tomorrow").
 
 ## Build order
 1. Repo scaffold, D1 schema migration, Pages project, secrets (`TMDB_TOKEN`, `OMDB_KEY`).
 2. Shared fetch/normalize module + `/api/search` and `POST /api/titles`. Test with one movie and one series.
-3. List UI with cards, tabs, status changes, delete.
+3. List UI with cards, Movies/Series tabs, delete.
 4. Detail panel.
 5. Cron Worker with change detection + events table.
 6. Updates feed and browser notifications.
-7. Cloudflare Access protection, attribution footer, final mobile pass.
+7. Password protection, attribution footer, final mobile pass.
 
 ## Out of scope for v1
 Multiple users, recommendations, episode-by-episode watch tracking, non-US regions.

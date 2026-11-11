@@ -124,7 +124,7 @@ function loginPage({ next = '/', error = '', status = 200 } = {}) {
       'Content-Type': 'text/html; charset=utf-8',
       'Cache-Control': 'no-store',
       'X-Frame-Options': 'DENY',
-      'Referrer-Policy': 'same-origin',
+      'Referrer-Policy': 'strict-origin-when-cross-origin',
     },
   });
 }
