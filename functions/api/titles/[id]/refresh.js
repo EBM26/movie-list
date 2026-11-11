@@ -15,5 +15,5 @@ export async function onRequestPost({ params, env }) {
     return json({ error: e.message }, 502);
   }
   const row = await updateTitle(env.DB, id, data);
-  return json({ title: rowToJson(row), ratings_error: data.ratings_error, long_overview_error: data.long_overview_error });
+  return json({ title: rowToJson(row), ratings_error: data.ratings_error });
 }

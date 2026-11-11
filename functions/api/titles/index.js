@@ -47,7 +47,7 @@ export async function onRequestPost({ request, env }) {
 
   try {
     const row = await insertTitle(env.DB, data);
-    return json({ title: rowToJson(row), created: true, ratings_error: data.ratings_error, long_overview_error: data.long_overview_error }, 201);
+    return json({ title: rowToJson(row), created: true, ratings_error: data.ratings_error }, 201);
   } catch (e) {
     // Race: saved by another request in the meantime.
     if (/UNIQUE/i.test(e.message)) {

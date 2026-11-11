@@ -130,16 +130,13 @@ Put the shared "fetch and normalize a title" logic in one module used by both th
 - Full-season-drop check: when the next episode is a season premiere, fetch that season. If every episode shares the same air date, set `full_season_drop = 1`.
 - Show networks (e.g. "Netflix", "HBO") on the card.
 
-### Longer overview
-- Look up the English Wikipedia article from the IMDb ID via Wikidata (P345 = imdb_id → enwiki sitelink; SPARQL first, search API as fallback).
-- Use only the article intro (lead section): the REST summary (`/api/rest_v1/page/summary/{title}`), or the full intro (`prop=extracts&exintro`) when the summary is under ~500 characters. Never include the Plot section.
-- No article → OMDb `plot=full` (same request as the ratings call).
-- Shown under the TMDB overview, collapsed to ~4 lines with "Read more", plus "Source: Wikipedia" (or IMDb via OMDb).
-- Cached in `long_overview*` columns for saved titles; a miss is cached only when both lookups succeeded.
+### Overview
+- The existing OMDb request uses `plot=full` (no extra call); the plot is stored in `omdb_plot`, refreshed with the ratings.
+- Show one overview: OMDb's full plot, falling back to the TMDB overview when the plot is "N/A" or shorter than TMDB's.
 
 ### Credits
-- Movies (`credits`): Director(s), Producer(s) (crew job "Producer"), top 8 cast in billing order with profile photo (w185), name, character.
-- Series (`created_by` + `aggregate_credits`): Created by, Executive Producers, top 8 cast by episode count with character names.
+- Movies (`credits`): Director(s) and the top 6 cast in billing order with profile photo (w185), name, character.
+- Series (`created_by` + `aggregate_credits`): Created by and the top 6 cast by episode count with character names.
 - Placeholder silhouette when there's no photo; cast row scrolls horizontally on phones. Stored in `credits_json`.
 
 ### Where to watch

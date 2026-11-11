@@ -15,11 +15,10 @@ export async function onRequestGet({ params, env }) {
   } catch (e) {
     return json({ error: e.message }, e.status === 404 ? 404 : 502);
   }
-  const { ratings_error, long_overview_error, ...fields } = data;
+  const { ratings_error, ...fields } = data;
   return json({
     title: { ...rowToJson(fields), id: null },
     saved_id: saved ? saved.id : null,
     ratings_error,
-    long_overview_error,
   });
 }
