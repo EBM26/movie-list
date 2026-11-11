@@ -153,6 +153,10 @@ img { display: block; }
 .muted { color: var(--muted); }
 .small { font-size: 13px; }
 
+/* ---------- Footer ---------- */
+.site-footer { border-top: 1px solid var(--line); padding: 20px 0 32px; font-size: 12px; color: var(--muted); }
+.site-footer a { color: inherit; }
+
 /* ---------- Toast ---------- */
 .toast {
   position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 60;

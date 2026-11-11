@@ -199,16 +199,11 @@ function logoImgs(list) {
     .join('');
 }
 
-// Card logos: streaming first, then rent/buy, deduped, max 5.
+// Card logos: streaming (flatrate) providers only, max 5. Rent/buy stay in the data
+// (has_rent_or_buy drives the status line and refresh alerts) but aren't shown as logos.
 function cardLogos(t) {
-  const p = providers(t);
-  const seen = new Set();
-  const all = [...p.flatrate, ...p.rent, ...p.buy].filter((x) => !seen.has(x.id) && seen.add(x.id)).slice(0, 5);
-  if (!all.length) return '';
-  const inner = logoImgs(all);
-  return p.link
-    ? `<a class="logos" href="${esc(p.link)}" target="_blank" rel="noopener" title="Where to watch">${inner}</a>`
-    : `<div class="logos">${inner}</div>`;
+  const list = providers(t).flatrate.slice(0, 5);
+  return list.length ? `<div class="logos">${logoImgs(list)}</div>` : '';
 }
 
 function statusSelect(t) {
@@ -560,33 +555,21 @@ function datesHtml(t) {
   return `<dl class="dates">${rows.map(([l, v]) => `<dt>${esc(l)}</dt><dd>${fmt(l, v)}</dd>`).join('')}</dl>`;
 }
 
+// Streaming (flatrate) providers only, with names.
 function providersHtml(t) {
-  const p = providers(t);
-  const groups = [
-    ['Stream', p.flatrate],
-    ['Rent', p.rent],
-    ['Buy', p.buy],
-  ].filter(([, list]) => list.length);
-  const body = groups.length
-    ? groups
-        .map(
-          ([label, list]) => `<div class="prov-group">
-            <div class="label">${label}</div>
-            ${p.link ? `<a class="logos" href="${esc(p.link)}" target="_blank" rel="noopener">${logoImgs(list)}</a>` : `<div class="logos">${logoImgs(list)}</div>`}
-          </div>`,
-        )
-        .join('')
-    : '<p class="muted small">Not available to stream, rent or buy in the US yet.</p>';
-  return body;
+  const list = providers(t).flatrate;
+  if (!list.length) return '<p class="muted small">Not streaming in the US right now.</p>';
+  return `<div class="prov-group">
+    <div class="logos">${logoImgs(list)}</div>
+    <div class="muted small" style="margin-top:6px">${esc(list.map((p) => p.name).join(', '))}</div>
+  </div>`;
 }
 
 function renderPanel() {
   const t = state.titles.find((x) => x.id === state.openId);
   if (!t) return closePanel();
-  const p = providers(t);
   const line = statusLine(t);
   const links = [
-    p.link && `<a href="${esc(p.link)}" target="_blank" rel="noopener">All options on JustWatch ↗</a>`,
     t.imdb_id && `<a href="https://www.imdb.com/title/${esc(t.imdb_id)}/" target="_blank" rel="noopener">IMDb ↗</a>`,
   ].filter(Boolean);
   const refreshed = t.last_refreshed_at ? `Updated ${formatDate(t.last_refreshed_at.slice(0, 10))}` : '';
@@ -613,7 +596,7 @@ function renderPanel() {
         : ''
     }
 
-    <h3>Where to watch (US)</h3>
+    <h3>Streaming (US)</h3>
     ${providersHtml(t)}
     ${links.length ? `<div class="links">${links.join('')}</div>` : ''}
 

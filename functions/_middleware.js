@@ -9,6 +9,8 @@
 // itself. Changing APP_PASSWORD invalidates every existing session.
 
 const COOKIE = '__Host-wl_session';
+// Served without login so the login page and "Add to Home Screen" can show the icon.
+const PUBLIC_PATHS = new Set(['/favicon.svg', '/apple-touch-icon.png']);
 const MAX_AGE = 30 * 24 * 60 * 60; // 30 days, in seconds
 const enc = new TextEncoder();
 
@@ -89,6 +91,9 @@ function loginPage({ next = '/', error = '', status = 200 } = {}) {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
 <title>Watchlist · Sign in</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-title" content="Watchlist">
 <style>
   * { box-sizing: border-box; }
   body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #fff; color: #111;
@@ -135,6 +140,10 @@ export async function onRequest(context) {
   // Fail closed if the secret is missing.
   if (!password) {
     return new Response('APP_PASSWORD is not configured.', { status: 503, headers: { 'Cache-Control': 'no-store' } });
+  }
+
+  if (PUBLIC_PATHS.has(path) && (request.method === 'GET' || request.method === 'HEAD')) {
+    return next();
   }
 
   if (path === '/logout') {
