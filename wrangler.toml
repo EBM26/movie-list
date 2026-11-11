@@ -1,0 +1,10 @@
+# Cloudflare Pages config (front end in /public, API in /functions).
+name = "movie-list"
+pages_build_output_dir = "public"
+compatibility_date = "2026-10-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "watchlist"
+database_id = "1feaea93-d447-4c3f-a39b-72cdac900a44"
+migrations_dir = "migrations"

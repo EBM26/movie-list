@@ -1,0 +1,13 @@
+{
+  "name": "movie-list",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler pages dev",
+    "db:migrate:local": "wrangler d1 migrations apply watchlist --local",
+    "db:migrate:remote": "wrangler d1 migrations apply watchlist --remote"
+  },
+  "devDependencies": {
+    "wrangler": "^4.160.1"
+  }
+}
