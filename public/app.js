@@ -41,6 +41,7 @@ async function api(path, opts = {}) {
     headers: opts.body ? { 'Content-Type': 'application/json' } : undefined,
     body: opts.body ? JSON.stringify(opts.body) : undefined,
   });
+  checkAuth(res);
   let data = null;
   try {
     data = await res.json();
@@ -49,6 +50,14 @@ async function api(path, opts = {}) {
   }
   if (!res.ok) throw new Error(data?.error || `Request failed (${res.status})`);
   return data;
+}
+
+// Session expired or logged out in another tab -> back to the login page.
+function checkAuth(res) {
+  if (res.status === 401) {
+    location.href = `/login?next=${encodeURIComponent(location.pathname + location.search)}`;
+    throw new Error('Not logged in');
+  }
 }
 
 let toastTimer;
@@ -427,6 +436,7 @@ async function runSearch(q) {
   if (!search.results.length) renderSearch();
   try {
     const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`, { signal: search.ctrl.signal });
+    checkAuth(res);
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Search failed');
     if (q !== search.q) return;

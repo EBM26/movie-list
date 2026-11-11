@@ -17,5 +17,9 @@ npm run dev                       # http://localhost:8788
 ```
 
 ## Deploy
-Pages deploys from `main`. Secrets (`TMDB_TOKEN`, `OMDB_KEY`) are set in the Pages project.
+Pages deploys from `main`. Secrets (`TMDB_TOKEN`, `OMDB_KEY`, `APP_PASSWORD`) are set in the Pages project.
+
+## Access
+The whole app (pages and `/api`) is behind a password login (`functions/_middleware.js`).
+A signed, HttpOnly session cookie lasts 30 days. Changing `APP_PASSWORD` logs out every session.
 Schema changes: add a migration file, then `npm run db:migrate:remote`.
