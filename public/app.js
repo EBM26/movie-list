@@ -669,9 +669,9 @@ function renderPanel() {
     <h3>${t.media_type === 'movie' ? 'US release dates' : 'Series info'}</h3>
     ${datesHtml(t)}
 
-    ${creditsHtml(t)}
-
     ${trailerHtml(t)}
+
+    ${creditsHtml(t)}
 
     <h3>Streaming (US)</h3>
     ${providersHtml(t)}
