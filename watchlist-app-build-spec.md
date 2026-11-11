@@ -18,8 +18,8 @@ Region is always **US**.
 ### TMDB (primary) — https://api.themoviedb.org/3
 Auth: `Authorization: Bearer <TMDB_TOKEN>` (v4 read access token).
 - Search: `GET /search/multi?query=...` (filter results to `media_type` movie or tv).
-- Movie details: `GET /movie/{id}?append_to_response=release_dates,watch/providers,external_ids,videos`
-- TV details: `GET /tv/{id}?append_to_response=watch/providers,external_ids,videos`
+- Movie details: `GET /movie/{id}?append_to_response=release_dates,watch/providers,external_ids,videos,credits`
+- TV details: `GET /tv/{id}?append_to_response=watch/providers,external_ids,videos,aggregate_credits`
 - TV season: `GET /tv/{id}/season/{n}` (only needed for the full-season-drop check).
 - Upcoming in US cinemas: `GET /movie/upcoming?region=US`
 - Images: `https://image.tmdb.org/t/p/w342{poster_path}`
@@ -129,6 +129,18 @@ Put the shared "fetch and normalize a title" logic in one module used by both th
   5. `In Production` / `Planned` → "In production" / "Announced".
 - Full-season-drop check: when the next episode is a season premiere, fetch that season. If every episode shares the same air date, set `full_season_drop = 1`.
 - Show networks (e.g. "Netflix", "HBO") on the card.
+
+### Longer overview
+- Look up the English Wikipedia article from the IMDb ID via Wikidata (P345 = imdb_id → enwiki sitelink; SPARQL first, search API as fallback).
+- Use only the article intro (lead section): the REST summary (`/api/rest_v1/page/summary/{title}`), or the full intro (`prop=extracts&exintro`) when the summary is under ~500 characters. Never include the Plot section.
+- No article → OMDb `plot=full` (same request as the ratings call).
+- Shown under the TMDB overview, collapsed to ~4 lines with "Read more", plus "Source: Wikipedia" (or IMDb via OMDb).
+- Cached in `long_overview*` columns for saved titles; a miss is cached only when both lookups succeeded.
+
+### Credits
+- Movies (`credits`): Director(s), Producer(s) (crew job "Producer"), top 8 cast in billing order with profile photo (w185), name, character.
+- Series (`created_by` + `aggregate_credits`): Created by, Executive Producers, top 8 cast by episode count with character names.
+- Placeholder silhouette when there's no photo; cast row scrolls horizontally on phones. Stored in `credits_json`.
 
 ### Where to watch
 - From `watch/providers.results.US`: `flatrate` (streaming), `rent`, `buy`, and `link` (JustWatch page). Store all of them, but on cards and in the detail panel show only streaming (`flatrate`) logos (`https://image.tmdb.org/t/p/w92{logo_path}`), with no JustWatch link. Rent/buy still drives `has_rent_or_buy`, the status line and refresh alerts.

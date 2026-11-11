@@ -584,6 +584,77 @@ function providersHtml(t) {
   </div>`;
 }
 
+// Longer overview (Wikipedia intro or OMDb full plot), collapsed to ~4 lines.
+function longOverviewHtml(t) {
+  const text = (t.long_overview || '').trim();
+  if (!text || text === (t.overview || '').trim()) return '';
+  const paras = text
+    .split(/\n{2,}/)
+    .map((p) => `<p>${esc(p)}</p>`)
+    .join('');
+  const label = t.long_overview_source === 'wikipedia' ? 'Wikipedia' : 'IMDb via OMDb';
+  const source = t.long_overview_url
+    ? `<a href="${esc(t.long_overview_url)}" target="_blank" rel="noopener">${label}</a>`
+    : label;
+  return `<div class="long-overview">
+      <div class="lo-text is-clamped" id="lo-text">${paras}</div>
+      <button class="link-btn" data-action="toggle-overview" aria-controls="lo-text" aria-expanded="false" hidden>Read more</button>
+      <div class="lo-source">Source: ${source}</div>
+    </div>`;
+}
+
+// Show "Read more" only when the text is actually longer than the clamp.
+function setupLongOverviewClamp() {
+  const el = $('#lo-text');
+  const btn = $('#panel-body [data-action="toggle-overview"]');
+  if (!el || !btn) return;
+  requestAnimationFrame(() => {
+    if (el.scrollHeight > el.clientHeight + 2) btn.hidden = false;
+    else el.classList.remove('is-clamped');
+  });
+}
+
+function toggleLongOverview(btn) {
+  const el = $('#lo-text');
+  const expanded = el.classList.toggle('is-clamped') === false;
+  btn.textContent = expanded ? 'Show less' : 'Read more';
+  btn.setAttribute('aria-expanded', String(expanded));
+}
+
+const SILHOUETTE = `<svg viewBox="0 0 40 60" aria-hidden="true"><rect width="40" height="60" fill="#ececec"/><circle cx="20" cy="22" r="9" fill="#c9c9c9"/><path d="M4 60c0-12 7.2-19 16-19s16 7 16 19z" fill="#c9c9c9"/></svg>`;
+
+function namesRow(label, plural, names, total) {
+  if (!names?.length) return '';
+  const more = total > names.length ? ` <span class="muted">+${total - names.length} more</span>` : '';
+  return `<dt>${names.length > 1 || total > 1 ? plural : label}</dt><dd>${esc(names.join(', '))}${more}</dd>`;
+}
+
+function creditsHtml(t) {
+  const c = t.credits;
+  if (!c) return '';
+  const crew =
+    t.media_type === 'movie'
+      ? namesRow('Director', 'Directors', c.directors) + namesRow('Producer', 'Producers', c.producers, c.producers_total)
+      : namesRow('Created by', 'Created by', c.created_by) +
+        namesRow('Executive Producer', 'Executive Producers', c.executive_producers, c.executive_producers_total);
+  const cast = (c.cast || [])
+    .map((p) => {
+      const photo = p.profile_path
+        ? `<img src="${IMG}w185${esc(p.profile_path)}" alt="" loading="lazy">`
+        : SILHOUETTE;
+      return `<li class="cast-member">
+          <div class="cast-photo">${photo}</div>
+          <div class="cast-name">${esc(p.name)}</div>
+          ${p.character ? `<div class="cast-character">${esc(p.character)}</div>` : ''}
+        </li>`;
+    })
+    .join('');
+  if (!crew && !cast) return '';
+  return `<h3>Cast &amp; crew</h3>
+    ${crew ? `<dl class="dates crew">${crew}</dl>` : ''}
+    ${cast ? `<ul class="cast-row" aria-label="Top cast">${cast}</ul>` : ''}`;
+}
+
 function trailerHtml(t) {
   if (!t.trailer_key) return '';
   return `<h3>Trailer</h3>
@@ -633,15 +704,19 @@ function renderPanel() {
     ${head}
     <div class="panel-actions panel-actions-top">${actions}</div>
     ${t.overview ? `<p class="overview">${esc(t.overview)}</p>` : ''}
+    ${longOverviewHtml(t)}
 
     <h3>${t.media_type === 'movie' ? 'US release dates' : 'Series info'}</h3>
     ${datesHtml(t)}
+
+    ${creditsHtml(t)}
 
     ${trailerHtml(t)}
 
     <h3>Streaming (US)</h3>
     ${providersHtml(t)}
     ${t.imdb_id ? `<div class="links"><a href="https://www.imdb.com/title/${esc(t.imdb_id)}/" target="_blank" rel="noopener">IMDb ↗</a></div>` : ''}`;
+  setupLongOverviewClamp();
 }
 
 async function refreshTitle(id, btn) {
@@ -691,6 +766,7 @@ function setupPanel() {
     if (btn.dataset.action === 'refresh') refreshTitle(state.openId, btn);
     if (btn.dataset.action === 'delete') removeTitle(state.openId);
     if (btn.dataset.action === 'save') saveFromPanel(btn);
+    if (btn.dataset.action === 'toggle-overview') toggleLongOverview(btn);
   });
 }
 
