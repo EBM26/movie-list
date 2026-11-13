@@ -44,7 +44,7 @@ CREATE TABLE titles (
   year INTEGER,
   poster_path TEXT,
   overview TEXT,
-  trailer_key TEXT,                -- YouTube key: site YouTube + type Trailer, official first, then newest
+  trailer_key TEXT,                -- YouTube key: site YouTube, type Trailer then Teaser; official first, then newest
   list_status TEXT NOT NULL DEFAULT 'want' CHECK (list_status IN ('want','watching','watched')),  -- unused by the UI since watched titles are deleted
   added_at TEXT NOT NULL DEFAULT (datetime('now')),
 
@@ -159,7 +159,7 @@ Single page, three areas:
 2. **Updates feed**: unseen events at the top, dismissable ("mark all seen"). Also show a browser notification for new unseen events when the page loads, if permission was granted.
 3. **My list**: card grid with two tabs, Movies (default) and Series. Sort by: recently added, IMDb rating, next release date.
    - Card: poster, title, year, IMDb rating + vote count (e.g. "7.8 · 412K votes"), RT/Metascore if present, the status line from the rules above, streaming provider logos, remove button (no status dropdown: watched titles get deleted).
-   - Click a card → detail panel: overview, all US release dates, trailer embed (`https://www.youtube-nocookie.com/embed/{key}`, `referrerpolicy="strict-origin-when-cross-origin"`, hidden when there's no trailer), streaming providers, IMDb link (`https://www.imdb.com/title/{imdb_id}/`), manual refresh button.
+   - Click a card → detail panel: overview, all US release dates, trailer link-out (no embed): 16:9 thumbnail `https://i.ytimg.com/vi/{key}/hqdefault.jpg` with a play-button overlay opening `https://www.youtube.com/watch?v={key}` in a new tab, plus a "More trailers on YouTube" link to `https://www.youtube.com/results?search_query={title}+{year}+trailer`; with no trailer key, only the search link), streaming providers, IMDb link (`https://www.imdb.com/title/{imdb_id}/`), manual refresh button.
    - Click a search result → the same detail panel for an unsaved title via `GET /api/preview/:media_type/:tmdb_id` (fetch + normalize, no DB write), with a "Save to list" button (or "Saved").
 
 Format vote counts as K/M. Format dates as "Mar 12, 2027". Use relative words for near dates ("Thursday", "tomorrow").

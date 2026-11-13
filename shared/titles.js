@@ -69,15 +69,19 @@ const toDate = (s) => (s ? String(s).slice(0, 10) : null); // ISO YYYY-MM-DD
 const toYear = (s) => (s && /^\d{4}/.test(s) ? Number(s.slice(0, 4)) : null);
 const na = (v) => (v === undefined || v === null || v === '' || v === 'N/A' ? null : v);
 
-// YouTube trailers only (no teasers/clips); official first, then newest.
+// YouTube only. Trailers first, then Teasers (no clips/featurettes); within each, official first, then newest.
+const VIDEO_TYPE_RANK = { Trailer: 0, Teaser: 1 };
 export function pickTrailer(videos) {
-  const trailers = (videos?.results || []).filter((v) => v.site === 'YouTube' && v.type === 'Trailer' && v.key);
-  trailers.sort(
+  const candidates = (videos?.results || []).filter(
+    (v) => v.site === 'YouTube' && v.key && v.type in VIDEO_TYPE_RANK,
+  );
+  candidates.sort(
     (a, b) =>
+      VIDEO_TYPE_RANK[a.type] - VIDEO_TYPE_RANK[b.type] ||
       (b.official ? 1 : 0) - (a.official ? 1 : 0) ||
       String(b.published_at || '').localeCompare(String(a.published_at || '')),
   );
-  return trailers[0]?.key || null;
+  return candidates[0]?.key || null;
 }
 
 export function normalizeProviders(watchProviders) {

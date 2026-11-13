@@ -541,7 +541,7 @@ function closePanel() {
   state.preview = null;
   $('#panel').hidden = true;
   $('#panel-backdrop').hidden = true;
-  $('#panel-body').innerHTML = ''; // stops the trailer
+  $('#panel-body').innerHTML = '';
   document.body.classList.remove('no-scroll');
   if (lastFocus && document.contains(lastFocus)) lastFocus.focus();
 }
@@ -616,16 +616,23 @@ function creditsHtml(t) {
     ${cast ? `<ul class="cast-row" aria-label="Top cast">${cast}</ul>` : ''}`;
 }
 
+// Link out to YouTube instead of embedding: a thumbnail with a play button, plus a search link.
 function trailerHtml(t) {
-  if (!t.trailer_key) return '';
+  const query = [t.title, t.year, 'trailer'].filter(Boolean).join(' ');
+  const searchUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(query).replace(/%20/g, '+')}`;
+  const key = t.trailer_key ? encodeURIComponent(t.trailer_key) : null;
+  const thumb = key
+    ? `<a class="trailer" href="https://www.youtube.com/watch?v=${key}" target="_blank" rel="noopener"
+         aria-label="Watch the ${esc(t.title)} trailer on YouTube">
+        <img src="https://i.ytimg.com/vi/${key}/hqdefault.jpg" alt="" loading="lazy">
+        <span class="trailer-play" aria-hidden="true">
+          <svg viewBox="0 0 68 48" width="68" height="48"><path d="M66.5 7.7a8.5 8.5 0 0 0-6-6C55.2.3 34 .3 34 .3S12.8.3 7.5 1.7a8.5 8.5 0 0 0-6 6C.1 13 .1 24 .1 24s0 11 1.4 16.3a8.5 8.5 0 0 0 6 6C12.8 47.7 34 47.7 34 47.7s21.2 0 26.5-1.4a8.5 8.5 0 0 0 6-6C67.9 35 67.9 24 67.9 24s0-11-1.4-16.3z" fill="rgba(0,0,0,.72)"/><path d="M27 34V14l18 10z" fill="#fff"/></svg>
+        </span>
+      </a>`
+    : '';
   return `<h3>Trailer</h3>
-    <div class="trailer">
-      <iframe src="https://www.youtube-nocookie.com/embed/${encodeURIComponent(t.trailer_key)}"
-        title="${esc(t.title)} trailer" loading="lazy"
-        referrerpolicy="strict-origin-when-cross-origin"
-        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-        allowfullscreen></iframe>
-    </div>`;
+    ${thumb}
+    <a class="trailer-more small" href="${esc(searchUrl)}" target="_blank" rel="noopener">More trailers on YouTube</a>`;
 }
 
 function renderPanel() {
